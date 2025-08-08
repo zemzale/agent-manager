@@ -1,0 +1,55 @@
+# .gitignore for a Go project that uses Taskfiles
+
+# Binaries for programs and plugins
+/bin/
+_build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Output of the go coverage tool
+coverage.out
+*.coverprofile
+
+# Dependency directories (remove the comment if vendoring)
+vendor/
+
+# Go workspace and module files that are usually not committed
+go.work
+go.work.sum
+
+# Task tool artifacts
+.task/
+.task/*
+
+# Editor and IDE directories
+.vscode/
+.idea/
+*.iml
+
+# Swap files, temporary files
+*.swp
+*.swo
+*~
+*.orig
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+
+# Logs and temporary runtime files
+*.log
+tmp/
+
+# Misc
+.gopath
+
+# Avoid ignoring project files that are typically tracked (Taskfile.yml, go.mod, go.sum, etc.)

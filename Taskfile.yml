@@ -1,0 +1,67 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the agent-manager binary
+    cmds:
+      - go build -o bin/agent-manager .
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - bin/agent-manager
+
+  run:
+    desc: Build and run agent-manager with arguments
+    deps: [build]
+    cmds:
+      - ./bin/agent-manager {{.CLI_ARGS}}
+
+  install:
+    desc: Install agent-manager to $GOPATH/bin
+    cmds:
+      - go install .
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/
+      - go clean
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Format code and run vet
+    deps: [fmt, vet]
+
+  dev:
+    desc: Quick development cycle - format, build, and run
+    deps: [lint, build]
+    cmds:
+      - echo "Built successfully! Run with ./bin/agent-manager <command>"
+
+  example:
+    desc: Run example clone command
+    deps: [build]
+    cmds:
+      - ./bin/agent-manager clone https://github.com/example/repo.git --tool opencode
+
+  help:
+    desc: Show available commands
+    deps: [build]
+    cmds:
+      - ./bin/agent-manager --help
