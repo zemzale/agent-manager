@@ -16,7 +16,3 @@ and cleaning up workspaces when you're done.`,
 func Execute() error {
 	return rootCmd.Execute()
 }
-
-func init() {
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
-}
