@@ -2,18 +2,22 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/zemzale/agent-manager/internal/ai"
 	"github.com/zemzale/agent-manager/internal/git"
 	"github.com/zemzale/agent-manager/internal/projects"
+	"github.com/zemzale/agent-manager/internal/session"
 	"github.com/zemzale/agent-manager/internal/workspace"
 )
 
 var (
-	aiTool        string
+	aiCommand     string
 	keepWorkspace bool
+	skipSetup     bool
 )
 
 var cloneCmd = &cobra.Command{
@@ -26,8 +30,8 @@ You can pass either a full Git URL (https/ssh) or a saved project name (see: age
 	RunE: func(cmd *cobra.Command, args []string) error {
 		target := args[0]
 
-		// Resolve target to a Git URL if a project name was provided.
-		gitURL, err := resolveGitURL(target)
+		// Resolve target to a Git URL and get project if it exists
+		gitURL, project, err := resolveTarget(target)
 		if err != nil {
 			return err
 		}
@@ -49,15 +53,48 @@ You can pass either a full Git URL (https/ssh) or a saved project name (see: age
 		// Clone the repository
 		gitClient := git.NewClient()
 		if err := gitClient.Clone(gitURL, ws.Path); err != nil {
-			// Clean up on failure
 			wsManager.Remove(ws.ID)
 			return fmt.Errorf("failed to clone repository: %w", err)
 		}
 
 		fmt.Printf("Successfully cloned %s\n", gitURL)
 
+		// Run setup commands if project has them and --skip-setup not set
+		if !skipSetup && project != nil && len(project.Commands) > 0 {
+			fmt.Println("Running setup commands...")
+			for _, c := range project.Commands {
+				fmt.Printf("  > %s\n", c)
+				cmd := exec.Command("sh", "-c", c)
+				cmd.Dir = ws.Path
+				cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+				if err := cmd.Run(); err != nil {
+					wsManager.Remove(ws.ID)
+					return fmt.Errorf("setup command failed: %w", err)
+				}
+			}
+		}
+
+		// Save session to history
+		sessionStore, err := session.NewStore()
+		if err == nil {
+			projectName := ""
+			if project != nil {
+				projectName = project.Name
+			}
+			newSession := session.Session{
+				ID:        ws.ID,
+				GitURL:    gitURL,
+				Project:   projectName,
+				Tool:      aiCommand,
+				Workspace: ws.Path,
+			}
+			if err := sessionStore.Add(newSession); err != nil {
+				fmt.Printf("Warning: failed to save session: %v\n", err)
+			}
+		}
+
 		// Launch AI tool
-		aiClient := ai.NewClient(aiTool)
+		aiClient := ai.NewClient(aiCommand)
 		if err := aiClient.Launch(ws.Path); err != nil {
 			fmt.Printf("Warning: failed to launch AI tool: %v\n", err)
 			fmt.Printf("You can manually navigate to: %s\n", ws.Path)
@@ -77,31 +114,41 @@ You can pass either a full Git URL (https/ssh) or a saved project name (see: age
 	},
 }
 
-func resolveGitURL(target string) (string, error) {
-	// Heuristic: URL if starts with http(s) or looks like SSH (contains ':')
+func resolveTarget(target string) (string, *projects.Project, error) {
 	isURL := strings.HasPrefix(target, "http://") ||
 		strings.HasPrefix(target, "https://") ||
 		strings.Contains(target, ":")
 
 	if isURL {
-		return target, nil
+		return target, nil, nil
 	}
 
 	store, err := projects.NewStore()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	if u, ok, err := store.Get(target); err != nil {
-		return "", err
-	} else if ok {
-		return u, nil
+	p, ok, err := store.GetProject(target)
+	if err != nil {
+		return "", nil, err
 	}
-	return "", fmt.Errorf("unknown project %q. Add it with: agent-manager projects add %s <git-url>", target, target)
+	if ok {
+		return p.URL, &p, nil
+	}
+	return "", nil, fmt.Errorf("unknown project %q. Add it with: agent-manager projects add %s <git-url>", target, target)
+}
+
+func resolveGitURL(target string) (string, error) {
+	url, _, err := resolveTarget(target)
+	return url, err
 }
 
 func init() {
 	rootCmd.AddCommand(cloneCmd)
 
-	cloneCmd.Flags().StringVar(&aiTool, "tool", "opencode", "AI tool to launch (opencode, cursor, etc.)")
-	cloneCmd.Flags().BoolVar(&keepWorkspace, "keep", false, "Keep workspace after AI tool exits")
+	// Add custom completion for the clone argument
+	cloneCmd.ValidArgsFunction = CustomCompletion
+
+	cloneCmd.Flags().StringVar(&aiCommand, "cmd", "opencode .", "Command to run in the workspace")
+	cloneCmd.Flags().BoolVar(&keepWorkspace, "keep", false, "Keep workspace after command exits")
+	cloneCmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip project setup commands")
 }

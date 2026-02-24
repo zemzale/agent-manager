@@ -19,9 +19,11 @@ tasks:
       - ./bin/agent-manager {{.CLI_ARGS}}
 
   install:
-    desc: Install agent-manager to $GOPATH/bin
+    desc: Install agent-manager and refresh Fish completions
     cmds:
       - go install .
+      - mkdir -p ~/.config/fish/completions
+      - sh -c 'BIN="${GOBIN:-$(go env GOPATH)/bin}/agent-manager"; "$BIN" completion fish > ~/.config/fish/completions/agent-manager.fish'
 
   clean:
     desc: Clean build artifacts
@@ -58,7 +60,7 @@ tasks:
     desc: Run example clone command
     deps: [build]
     cmds:
-      - ./bin/agent-manager clone https://github.com/example/repo.git --tool opencode
+      - ./bin/agent-manager clone https://github.com/example/repo.git --cmd "opencode ."
 
   help:
     desc: Show available commands
