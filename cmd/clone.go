@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	aiCommand     string
-	keepWorkspace bool
-	skipSetup     bool
+	aiCommand      string
+	keepWorkspace  bool
+	skipSetup      bool
+	tmuxDispatched bool
 )
 
 var cloneCmd = &cobra.Command{
@@ -34,6 +35,14 @@ You can pass either a full Git URL (https/ssh) or a saved project name (see: age
 		gitURL, project, err := resolveTarget(target)
 		if err != nil {
 			return err
+		}
+
+		dispatched, err := dispatchCloneToTmux(gitURL, project)
+		if err != nil {
+			return err
+		}
+		if dispatched {
+			return nil
 		}
 
 		// Create workspace manager
@@ -151,4 +160,6 @@ func init() {
 	cloneCmd.Flags().StringVar(&aiCommand, "cmd", "opencode .", "Command to run in the workspace")
 	cloneCmd.Flags().BoolVar(&keepWorkspace, "keep", false, "Keep workspace after command exits")
 	cloneCmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip project setup commands")
+	cloneCmd.Flags().BoolVar(&tmuxDispatched, "tmux-dispatched", false, "Internal flag for tmux dispatch")
+	_ = cloneCmd.Flags().MarkHidden("tmux-dispatched")
 }
