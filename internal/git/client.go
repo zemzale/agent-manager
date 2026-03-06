@@ -12,12 +12,21 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-func (c *Client) Clone(url, destination string) error {
-	cmd := exec.Command("git", "clone", url, destination)
+func (c *Client) Clone(url, destination, branch string) error {
+	cmd := exec.Command("git", cloneArgs(url, destination, branch)...)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 	return nil
+}
+
+func cloneArgs(url, destination, branch string) []string {
+	args := []string{"clone"}
+	if branch != "" {
+		args = append(args, "--branch", branch)
+	}
+	args = append(args, url, destination)
+	return args
 }
 
 func (c *Client) ListRemotes() ([]string, error) {

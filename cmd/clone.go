@@ -16,6 +16,7 @@ import (
 
 var (
 	aiCommand      string
+	cloneBranch    string
 	keepWorkspace  bool
 	skipSetup      bool
 	tmuxDispatched bool
@@ -61,7 +62,7 @@ You can pass either a full Git URL (https/ssh) or a saved project name (see: age
 
 		// Clone the repository
 		gitClient := git.NewClient()
-		if err := gitClient.Clone(gitURL, ws.Path); err != nil {
+		if err := gitClient.Clone(gitURL, ws.Path, cloneBranch); err != nil {
 			wsManager.Remove(ws.ID)
 			return fmt.Errorf("failed to clone repository: %w", err)
 		}
@@ -158,6 +159,7 @@ func init() {
 	cloneCmd.ValidArgsFunction = CustomCompletion
 
 	cloneCmd.Flags().StringVar(&aiCommand, "cmd", "opencode .", "Command to run in the workspace")
+	cloneCmd.Flags().StringVarP(&cloneBranch, "branch", "b", "", "Branch to check out after clone")
 	cloneCmd.Flags().BoolVar(&keepWorkspace, "keep", false, "Keep workspace after command exits")
 	cloneCmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip project setup commands")
 	cloneCmd.Flags().BoolVar(&tmuxDispatched, "tmux-dispatched", false, "Internal flag for tmux dispatch")
