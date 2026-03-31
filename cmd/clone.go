@@ -447,7 +447,7 @@ func init() {
 	// Add custom completion for the clone argument
 	cloneCmd.ValidArgsFunction = CustomCompletion
 
-	cloneCmd.Flags().StringVar(&aiCommand, "cmd", "opencode .", "Command to run in the workspace")
+	cloneCmd.Flags().StringVar(&aiCommand, "cmd", "opencode {workspace}", "Command to run in the workspace")
 	cloneCmd.Flags().StringVarP(&cloneBranch, "branch", "b", "", "Branch to check out after clone")
 	cloneCmd.Flags().BoolVar(&keepWorkspace, "keep", false, "Keep workspace after command exits")
 	cloneCmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip project setup commands")

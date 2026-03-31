@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -16,7 +17,7 @@ func NewClient(command string) *Client {
 }
 
 func (c *Client) Launch(workspacePath string) error {
-	cmd := exec.Command("sh", "-c", c.command)
+	cmd := exec.Command("sh", "-c", resolveCommand(c.command, workspacePath))
 	cmd.Dir = workspacePath
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -34,4 +35,25 @@ func (c *Client) Launch(workspacePath string) error {
 	}
 
 	return nil
+}
+
+func resolveCommand(command, workspacePath string) string {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "opencode ." {
+		return "opencode " + shellQuote(workspacePath)
+	}
+
+	if strings.Contains(command, "{workspace}") {
+		return strings.ReplaceAll(command, "{workspace}", shellQuote(workspacePath))
+	}
+
+	return command
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
