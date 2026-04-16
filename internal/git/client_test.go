@@ -1,7 +1,9 @@
 package git
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -101,5 +103,26 @@ func TestParseLSRemoteDefaultBranch(t *testing.T) {
 				t.Fatalf("parseLSRemoteDefaultBranch() = %q, want %q", got, tc.expected)
 			}
 		})
+	}
+}
+
+func TestCloneReturnsGitOutputOnFailure(t *testing.T) {
+	client := NewClient()
+	err := client.Clone("file:///tmp/this-repo-should-not-exist.git", t.TempDir(), "")
+	if err == nil {
+		t.Fatal("Clone() error = nil, want failure")
+	}
+
+	var exitErr interface{ ExitCode() int }
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("Clone() error = %T, want wrapped exit error", err)
+	}
+
+	if !strings.Contains(err.Error(), "git clone failed") {
+		t.Fatalf("Clone() error = %q, want git clone context", err)
+	}
+
+	if !strings.Contains(err.Error(), "does not appear to be a git repository") {
+		t.Fatalf("Clone() error = %q, want git stderr output", err)
 	}
 }

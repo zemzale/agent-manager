@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -104,18 +105,11 @@ If no target is provided, an interactive picker is shown.`,
 
 		fmt.Printf("Successfully cloned %s\n", gitURL)
 
-		// Run setup commands if project has them and --skip-setup not set
+		// Run setup commands if project has them and --skip-setup not set.
 		if !skipSetup && project != nil && len(project.Commands) > 0 {
-			fmt.Println("Running setup commands...")
-			for _, c := range project.Commands {
-				fmt.Printf("  > %s\n", c)
-				setupCmd := exec.Command("sh", "-c", c)
-				setupCmd.Dir = ws.Path
-				setupCmd.Stdout, setupCmd.Stderr = os.Stdout, os.Stderr
-				if err := setupCmd.Run(); err != nil {
-					wsManager.Remove(ws.ID)
-					return fmt.Errorf("setup command failed: %w", err)
-				}
+			failures := runSetupCommands(ws.Path, project.Commands, os.Stdout, os.Stderr)
+			if len(failures) > 0 {
+				fmt.Printf("Warning: %d setup command(s) failed; continuing with cloned workspace\n", len(failures))
 			}
 		}
 
@@ -157,6 +151,31 @@ If no target is provided, an interactive picker is shown.`,
 
 		return nil
 	},
+}
+
+type setupCommandFailure struct {
+	command string
+	err     error
+}
+
+func runSetupCommands(workspacePath string, commands []string, stdout, stderr io.Writer) []setupCommandFailure {
+	fmt.Fprintln(stdout, "Running setup commands...")
+
+	failures := make([]setupCommandFailure, 0)
+	for _, command := range commands {
+		fmt.Fprintf(stdout, "  > %s\n", command)
+
+		setupCmd := exec.Command("sh", "-c", command)
+		setupCmd.Dir = workspacePath
+		setupCmd.Stdout = stdout
+		setupCmd.Stderr = stderr
+		if err := setupCmd.Run(); err != nil {
+			fmt.Fprintf(stderr, "Warning: setup command failed (%q): %v\n", command, err)
+			failures = append(failures, setupCommandFailure{command: command, err: err})
+		}
+	}
+
+	return failures
 }
 
 func resolveInteractiveCloneInputs(cmd *cobra.Command) (string, *projects.Project, error) {

@@ -15,7 +15,13 @@ func NewClient() *Client {
 
 func (c *Client) Clone(url, destination, branch string) error {
 	cmd := exec.Command("git", cloneArgs(url, destination, branch)...)
-	if err := cmd.Run(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		message := strings.TrimSpace(string(out))
+		if message != "" {
+			return fmt.Errorf("git clone failed: %w: %s", err, message)
+		}
+
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 	return nil
