@@ -29,8 +29,8 @@ func TestResolveCommand(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveCommand(tc.command, workspacePath); got != tc.expected {
-				t.Fatalf("resolveCommand(%q) = %q, want %q", tc.command, got, tc.expected)
+			if got := ResolveCommand(tc.command, workspacePath); got != tc.expected {
+				t.Fatalf("ResolveCommand(%q) = %q, want %q", tc.command, got, tc.expected)
 			}
 		})
 	}

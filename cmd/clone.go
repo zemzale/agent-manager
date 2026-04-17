@@ -19,7 +19,6 @@ import (
 var (
 	aiCommand      string
 	cloneBranch    string
-	keepWorkspace  bool
 	skipSetup      bool
 	tmuxDispatched bool
 )
@@ -52,14 +51,6 @@ If no target is provided, an interactive picker is shown.`,
 		)
 
 		if len(args) == 0 {
-			dispatched, err := dispatchCloneToTmux("", nil)
-			if err != nil {
-				return err
-			}
-			if dispatched {
-				return nil
-			}
-
 			gitURL, project, err = resolveInteractiveCloneInputs(cmd)
 			if err != nil {
 				return err
@@ -73,13 +64,6 @@ If no target is provided, an interactive picker is shown.`,
 				return err
 			}
 
-			dispatched, err := dispatchCloneToTmux(gitURL, project)
-			if err != nil {
-				return err
-			}
-			if dispatched {
-				return nil
-			}
 		}
 
 		// Create workspace manager
@@ -132,22 +116,20 @@ If no target is provided, an interactive picker is shown.`,
 			}
 		}
 
-		// Launch AI tool
-		aiClient := ai.NewClient(aiCommand)
-		if err := aiClient.Launch(ws.Path); err != nil {
-			fmt.Printf("Warning: failed to launch AI tool: %v\n", err)
-			fmt.Printf("You can manually navigate to: %s\n", ws.Path)
+		// Launch AI tool, preferring a dedicated tmux session when invoked from tmux.
+		launchedInTmux, err := launchCloneInTmux(gitURL, ws.Path, aiCommand, project)
+		if err != nil {
+			fmt.Printf("Warning: failed to open tmux workspace: %v\n", err)
+		}
+		if !launchedInTmux {
+			aiClient := ai.NewClient(aiCommand)
+			if err := aiClient.Launch(ws.Path); err != nil {
+				fmt.Printf("Warning: failed to launch AI tool: %v\n", err)
+				fmt.Printf("You can manually navigate to: %s\n", ws.Path)
+			}
 		}
 
-		// Clean up workspace unless --keep is specified
-		if !keepWorkspace {
-			fmt.Println("Cleaning up workspace...")
-			if err := wsManager.Remove(ws.ID); err != nil {
-				fmt.Printf("Warning: failed to clean up workspace: %v\n", err)
-			}
-		} else {
-			fmt.Printf("Workspace preserved at: %s\n", ws.Path)
-		}
+		fmt.Printf("Workspace preserved at: %s\n", ws.Path)
 
 		return nil
 	},
@@ -223,14 +205,6 @@ func resolveInteractiveCloneInputs(cmd *cobra.Command) (string, *projects.Projec
 			return "", nil, err
 		}
 		cloneBranch = selectedBranch
-	}
-
-	if !cmd.Flags().Changed("keep") {
-		keep, err := ui.ConfirmChoice("Keep workspace after command exits?", false)
-		if err != nil {
-			return "", nil, fmt.Errorf("keep-workspace selection cancelled")
-		}
-		keepWorkspace = keep
 	}
 
 	if shouldSave {
@@ -468,7 +442,6 @@ func init() {
 
 	cloneCmd.Flags().StringVar(&aiCommand, "cmd", "opencode {workspace}", "Command to run in the workspace")
 	cloneCmd.Flags().StringVarP(&cloneBranch, "branch", "b", "", "Branch to check out after clone")
-	cloneCmd.Flags().BoolVar(&keepWorkspace, "keep", false, "Keep workspace after command exits")
 	cloneCmd.Flags().BoolVar(&skipSetup, "skip-setup", false, "Skip project setup commands")
 	cloneCmd.Flags().BoolVar(&tmuxDispatched, "tmux-dispatched", false, "Internal flag for tmux dispatch")
 	_ = cloneCmd.Flags().MarkHidden("tmux-dispatched")

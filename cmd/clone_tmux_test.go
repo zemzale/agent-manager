@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
 	"github.com/zemzale/agent-manager/internal/projects"
@@ -42,16 +43,25 @@ func TestSanitizeTmuxName(t *testing.T) {
 	}
 }
 
-func TestBuildTmuxDispatchCommand(t *testing.T) {
-	cmd := buildTmuxDispatchCommand("/usr/local/bin/agent-manager", []string{"clone", "my'repo", "--cmd", "opencode ."})
-	expected := "'/usr/local/bin/agent-manager' 'clone' 'my'\"'\"'repo' '--cmd' 'opencode .' '--tmux-dispatched'"
-	if cmd != expected {
-		t.Fatalf("unexpected command\n got: %s\nwant: %s", cmd, expected)
+func TestLaunchCloneInTmuxNoopOutsideTmux(t *testing.T) {
+	original := os.Getenv("TMUX")
+	t.Cleanup(func() {
+		if original == "" {
+			_ = os.Unsetenv("TMUX")
+			return
+		}
+		_ = os.Setenv("TMUX", original)
+	})
+
+	if err := os.Unsetenv("TMUX"); err != nil {
+		t.Fatalf("unset TMUX: %v", err)
 	}
 
-	withFlag := buildTmuxDispatchCommand("agent-manager", []string{"clone", "demo", "--tmux-dispatched"})
-	expectedWithFlag := "'agent-manager' 'clone' 'demo' '--tmux-dispatched'"
-	if withFlag != expectedWithFlag {
-		t.Fatalf("expected no duplicate flag\n got: %s\nwant: %s", withFlag, expectedWithFlag)
+	launched, err := launchCloneInTmux("https://github.com/user/repo.git", "/tmp/repo", "opencode {workspace}", nil)
+	if err != nil {
+		t.Fatalf("launchCloneInTmux() error = %v", err)
+	}
+	if launched {
+		t.Fatal("launchCloneInTmux() = true, want false outside tmux")
 	}
 }

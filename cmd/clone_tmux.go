@@ -8,21 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zemzale/agent-manager/internal/ai"
 	"github.com/zemzale/agent-manager/internal/git"
 	"github.com/zemzale/agent-manager/internal/projects"
 )
 
-func dispatchCloneToTmux(gitURL string, project *projects.Project) (bool, error) {
-	if tmuxDispatched || os.Getenv("TMUX") == "" {
+func launchCloneInTmux(gitURL, workspacePath, command string, project *projects.Project) (bool, error) {
+	if os.Getenv("TMUX") == "" {
 		return false, nil
 	}
 
-	exe, err := os.Executable()
-	if err != nil {
-		return false, fmt.Errorf("resolve executable for tmux dispatch: %w", err)
-	}
-
-	command := buildTmuxDispatchCommand(exe, os.Args[1:])
+	resolvedCommand := ai.ResolveCommand(command, workspacePath)
 	sessionName := tmuxSessionName(project, gitURL)
 	windowName := fmt.Sprintf("clone-%s", time.Now().Format("150405"))
 
@@ -33,11 +29,15 @@ func dispatchCloneToTmux(gitURL string, project *projects.Project) (bool, error)
 
 	var target string
 	if exists {
-		target, err = tmuxCreateWindow(sessionName, windowName, command)
+		target, err = tmuxCreateWindow(sessionName, windowName, workspacePath)
 	} else {
-		target, err = tmuxCreateSessionWithWindow(sessionName, windowName, command)
+		target, err = tmuxCreateSessionWithWindow(sessionName, windowName, workspacePath)
 	}
 	if err != nil {
+		return false, err
+	}
+
+	if err := tmuxSendKeys(target, resolvedCommand); err != nil {
 		return false, err
 	}
 
@@ -45,7 +45,7 @@ func dispatchCloneToTmux(gitURL string, project *projects.Project) (bool, error)
 		return false, err
 	}
 
-	fmt.Printf("Started clone in tmux window %s\n", target)
+	fmt.Printf("Opened tmux window %s\n", target)
 	return true, nil
 }
 
@@ -92,41 +92,6 @@ func sanitizeTmuxName(name string) string {
 	return clean
 }
 
-func buildTmuxDispatchCommand(executable string, args []string) string {
-	clonedArgs := append([]string{}, args...)
-	if !hasFlag(clonedArgs, "--tmux-dispatched") {
-		clonedArgs = append(clonedArgs, "--tmux-dispatched")
-	}
-
-	parts := append([]string{executable}, clonedArgs...)
-	return shellJoin(parts)
-}
-
-func hasFlag(args []string, flag string) bool {
-	for _, arg := range args {
-		if arg == flag || strings.HasPrefix(arg, flag+"=") {
-			return true
-		}
-	}
-	return false
-}
-
-func shellJoin(parts []string) string {
-	quoted := make([]string, 0, len(parts))
-	for _, p := range parts {
-		quoted = append(quoted, shellQuote(p))
-	}
-	return strings.Join(quoted, " ")
-}
-
-func shellQuote(value string) string {
-	if value == "" {
-		return "''"
-	}
-
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
-
 func tmuxSessionExists(sessionName string) (bool, error) {
 	cmd := exec.Command("tmux", "has-session", "-t", "="+sessionName)
 	err := cmd.Run()
@@ -142,7 +107,7 @@ func tmuxSessionExists(sessionName string) (bool, error) {
 	return false, fmt.Errorf("check tmux session %q: %w", sessionName, err)
 }
 
-func tmuxCreateWindow(sessionName, windowName, command string) (string, error) {
+func tmuxCreateWindow(sessionName, windowName, workspacePath string) (string, error) {
 	cmd := exec.Command(
 		"tmux",
 		"new-window",
@@ -151,9 +116,10 @@ func tmuxCreateWindow(sessionName, windowName, command string) (string, error) {
 		"#{session_name}:#{window_index}",
 		"-t",
 		"="+sessionName,
+		"-c",
+		workspacePath,
 		"-n",
 		windowName,
-		command,
 	)
 	out, err := cmd.Output()
 	if err != nil {
@@ -168,7 +134,7 @@ func tmuxCreateWindow(sessionName, windowName, command string) (string, error) {
 	return target, nil
 }
 
-func tmuxCreateSessionWithWindow(sessionName, windowName, command string) (string, error) {
+func tmuxCreateSessionWithWindow(sessionName, windowName, workspacePath string) (string, error) {
 	cmd := exec.Command(
 		"tmux",
 		"new-session",
@@ -178,9 +144,10 @@ func tmuxCreateSessionWithWindow(sessionName, windowName, command string) (strin
 		"#{session_name}:#{window_index}",
 		"-s",
 		sessionName,
+		"-c",
+		workspacePath,
 		"-n",
 		windowName,
-		command,
 	)
 	out, err := cmd.Output()
 	if err != nil {
@@ -193,6 +160,14 @@ func tmuxCreateSessionWithWindow(sessionName, windowName, command string) (strin
 	}
 
 	return target, nil
+}
+
+func tmuxSendKeys(target, command string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", target, command, "C-m")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("send command to tmux target %q: %w", target, err)
+	}
+	return nil
 }
 
 func tmuxSwitchClient(target string) error {
