@@ -1,38 +1,25 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/zemzale/agent-manager/internal/ai"
 	"github.com/zemzale/agent-manager/internal/git"
 	"github.com/zemzale/agent-manager/internal/projects"
 )
 
-func launchCloneInTmux(gitURL, workspacePath, command string, project *projects.Project) (bool, error) {
+func launchCloneInTmux(gitURL, workspaceID, workspacePath, command string, project *projects.Project) (bool, error) {
 	if os.Getenv("TMUX") == "" {
 		return false, nil
 	}
 
 	resolvedCommand := ai.ResolveCommand(command, workspacePath)
-	sessionName := tmuxSessionName(project, gitURL)
-	windowName := fmt.Sprintf("clone-%s", time.Now().Format("150405"))
-
-	exists, err := tmuxSessionExists(sessionName)
-	if err != nil {
-		return false, err
-	}
-
-	var target string
-	if exists {
-		target, err = tmuxCreateWindow(sessionName, windowName, workspacePath)
-	} else {
-		target, err = tmuxCreateSessionWithWindow(sessionName, windowName, workspacePath)
-	}
+	slug := projectSlug(project, gitURL)
+	sessionName := tmuxSessionName(slug, workspaceID)
+	target, err := tmuxCreateSession(sessionName, slug, workspacePath)
 	if err != nil {
 		return false, err
 	}
@@ -49,9 +36,12 @@ func launchCloneInTmux(gitURL, workspacePath, command string, project *projects.
 	return true, nil
 }
 
-func tmuxSessionName(project *projects.Project, gitURL string) string {
-	projectKey := projectKey(project, gitURL)
-	return "am-" + sanitizeTmuxName(projectKey)
+func tmuxSessionName(projectSlug, workspaceID string) string {
+	return fmt.Sprintf("am-%s-%s", projectSlug, workspaceID)
+}
+
+func projectSlug(project *projects.Project, gitURL string) string {
+	return slugify(projectKey(project, gitURL))
 }
 
 func projectKey(project *projects.Project, gitURL string) string {
@@ -67,12 +57,12 @@ func projectKey(project *projects.Project, gitURL string) string {
 	return repo
 }
 
-func sanitizeTmuxName(name string) string {
+func slugify(name string) string {
 	var b strings.Builder
 	lastDash := false
 
 	for _, r := range strings.ToLower(name) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			b.WriteRune(r)
 			lastDash = false
 			continue
@@ -92,49 +82,7 @@ func sanitizeTmuxName(name string) string {
 	return clean
 }
 
-func tmuxSessionExists(sessionName string) (bool, error) {
-	cmd := exec.Command("tmux", "has-session", "-t", "="+sessionName)
-	err := cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return false, nil
-	}
-
-	return false, fmt.Errorf("check tmux session %q: %w", sessionName, err)
-}
-
-func tmuxCreateWindow(sessionName, windowName, workspacePath string) (string, error) {
-	cmd := exec.Command(
-		"tmux",
-		"new-window",
-		"-P",
-		"-F",
-		"#{session_name}:#{window_index}",
-		"-t",
-		"="+sessionName,
-		"-c",
-		workspacePath,
-		"-n",
-		windowName,
-	)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("create tmux window in %q: %w", sessionName, err)
-	}
-
-	target := strings.TrimSpace(string(out))
-	if target == "" {
-		return "", fmt.Errorf("tmux did not return window target")
-	}
-
-	return target, nil
-}
-
-func tmuxCreateSessionWithWindow(sessionName, windowName, workspacePath string) (string, error) {
+func tmuxCreateSession(sessionName, windowName, workspacePath string) (string, error) {
 	cmd := exec.Command(
 		"tmux",
 		"new-session",

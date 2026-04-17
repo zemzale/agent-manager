@@ -117,7 +117,7 @@ If no target is provided, an interactive picker is shown.`,
 		}
 
 		// Launch AI tool, preferring a dedicated tmux session when invoked from tmux.
-		launchedInTmux, err := launchCloneInTmux(gitURL, ws.Path, aiCommand, project)
+		launchedInTmux, err := launchCloneInTmux(gitURL, ws.ID, ws.Path, aiCommand, project)
 		if err != nil {
 			fmt.Printf("Warning: failed to open tmux workspace: %v\n", err)
 		}
